@@ -1,8 +1,8 @@
 [x,t] = simplefit_dataset;
 net = FFNN(1,1,[30],'activation_fun_str_list',{'tanh','purelin'});
 net = net.train(x, t,...
-                'EpochNum',5000,...
-                'LearningRate',2);
+                'EpochNum',2000,...
+                'LearningRate',3);
 t_hat = net.predict(x);
 figure
 hold on
