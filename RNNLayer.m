@@ -7,8 +7,8 @@ classdef RNNLayer
         hidden_layer_size_arr
         hidden_layer_num
         Weight_layers = {}
-        Bias_Layers = {}    
         Recursive_Weight_layers = {}
+        Bias_Layers = {}
         activation_fun_str_list = {}
         activation_fun_obj_list = {}
     end
@@ -69,44 +69,71 @@ classdef RNNLayer
                     obj.Bias_Layers{end+1} = randn(hidden_layer_size_arr(i),...
                                                      1);
                 end
-                
+                % initialize recursive weights
                 if(i~=obj.hidden_layer_num+1)
-                    obj.Recursive_Weight_layers{end+1} = randn(hidden_layer_size_arr(i),...
-                                                               hidden_layer_size_arr(i));                    
+                    obj.Recursive_Weight_layers{i} = randn(hidden_layer_size_arr(i),...
+                                                     hidden_layer_size_arr(i));
                 end
             end 
         end
-        function [a, h_list, a_list] = forward(obj, x, prev_a_list)
-            a = x;
-            a_list = {x};
-            y_list = {};
+        function [h, a_list, h_list] = forward(obj, x, h_list_prev)
+            h = x;
+            h_list = {x};
+            a_list = {};
             for i = 1:obj.hidden_layer_num+1
-                y = obj.mulgate.forward(obj.Weight_layers{i}, a);
+                a = obj.mulgate.forward(obj.Weight_layers{i}, h);
                 if(i~=obj.hidden_layer_num+1)
-                    prev_s = obj.mulgate.forward(obj.Recursive_Weight_layers{i}, prev_a_list{i+1});
-                    y = obj.addgate.forward(y, prev_s);
+                     r = obj.mulgate.forward(obj.Recursive_Weight_layers{i}, h_list_prev{i+1});
+                     a = obj.addgate.forward(a,r);                     
                 end
-                y = obj.addgate.forward(y, obj.Bias_Layers{i});
-                a = obj.activation_fun_obj_list{i}.forward(y);
-                y_list{end+1} = y;
+                a = obj.addgate.forward(a, obj.Bias_Layers{i});
+                h = obj.activation_fun_obj_list{i}.forward(a);
                 a_list{end+1} = a;
+                h_list{end+1} = h;
             end
+           
         end
         % backward computation of neural network
-        function  [Weight_layers_delta, Bias_Layers_delta] = backward(obj, x, t, cost_function_obj)
-            [t_hat, y_list, a_list] = obj.forward(x);
-            
+        function  [Weight_layers_delta,... 
+                   Bias_Layers_delta,...
+                   Recursive_Weight_layers_delta,...
+                   recursive_gradient_list] = backward(obj,... 
+                                               x,y, ...
+                                               cost_function_obj,...
+                                               latter_recursive_gradient_list,...
+                                               h_list_prev)
+            [y_hat, a_list, h_list] = obj.forward(x);
+        
             % calculate gradients of each weight and bias parameters
-            gradient = cost_function_obj.backward(t, t_hat);
+            gradient = cost_function_obj.backward(y, y_hat);
             Weight_layers_delta ={};
             Bias_Layers_delta = {};
+            Recursive_Weight_layers_delta = {};
+            recursive_gradient_list = {};
             for i = obj.hidden_layer_num+1:-1:1
-                gradient = obj.activation_fun_obj_list{i}.backward(y_list{i}, gradient);
+                gradient = obj.activation_fun_obj_list{i}.backward(a_list{i}, gradient);
                 b_delta = gradient;
-                [W_delta, gradient] = obj.mulgate.backward(obj.Weight_layers{i}, a_list{i}, gradient);
+                if(i~=obj.hidden_layer_num+1)
+                    R_delta = obj.mulgate.backward(obj.Recursive_Weight_layers{i}, h_list_prev{i+1}, gradient);
+                    recursive_gradient = obj.Recursive_Weight_layers{i}.'*gradient;
+                end
+                [W_delta, gradient] = obj.mulgate.backward(obj.Weight_layers{i}, h_list{i}, gradient);
+                if(i~=obj.hidden_layer_num+1)
+                    gradient = gradient + latter_recursive_gradient_list{i};   
+                end                
                 Weight_layers_delta = [{W_delta}, Weight_layers_delta];
                 Bias_Layers_delta = [{b_delta}, Bias_Layers_delta];
+                h_gradient_list = [{gradient}, h_gradient_list];
+                recursive_gradient_list = [{recursive_gradient}, recursive_gradient_list];
             end
+        end
+        
+        function h_list = get_zero_h_list(obj)
+            h_list = {zeros(obj.input_dim,1)};
+            for i = 1:size(obj.hidden_layer_num)
+                h_list = [h_list, {zeros(obj.hidden_layer_num(i),1)}];
+            end
+            h_list = [h_list, {zeros(obj.output_dim,1)}];
         end
     end
 end
