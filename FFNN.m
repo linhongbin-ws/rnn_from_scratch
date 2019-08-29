@@ -130,8 +130,8 @@ classdef FFNN
                 
                 loss = 0;
                 for i=1:sample_num
-                    t_hat = obj.forward(X_train(:,i));
-                    loss = loss + obj.cost_function.forward(Y_train(:,i), t_hat);
+                    y_hat = obj.forward(X_train(:,i));
+                    loss = loss + obj.cost_function.forward(Y_train(:,i), y_hat);
                 end
                 loss = loss/sample_num;
                 fprintf('log of loss is %.5f\n', loss);
@@ -139,13 +139,13 @@ classdef FFNN
         end
         
         % forward computation of neural network
-        function [a, y_list, a_list] = forward(obj, x)
-            [a, y_list, a_list] = obj.net.forward(x);        
+        function [y_hat, a_list, h_list] = forward(obj, x)
+            [y_hat, a_list, h_list] = obj.net.forward(x);        
         end
         
         % backward computation of neural network
-        function  [Weight_layers_delta, Bias_Layers_delta] = backward(obj, x, t)
-            [Weight_layers_delta, Bias_Layers_delta] = obj.net.backward(x, t, obj.cost_function);
+        function  [Weight_layers_delta, Bias_Layers_delta] = backward(obj, x, y)
+            [Weight_layers_delta, Bias_Layers_delta] = obj.net.backward(x, y, obj.cost_function);
         end
         
         % Z-score normalization

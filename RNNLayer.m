@@ -1,4 +1,4 @@
-classdef FFNNLayer
+classdef RNNLayer
     properties
         mulgate 
         addgate
@@ -7,12 +7,13 @@ classdef FFNNLayer
         hidden_layer_size_arr
         hidden_layer_num
         Weight_layers = {}
-        Bias_Layers = {}
+        Bias_Layers = {}    
+        Recursive_Weight_layers = {}
         activation_fun_str_list = {}
         activation_fun_obj_list = {}
     end
     methods
-        function obj = FFNNLayer(input_dim,...
+        function obj = RNNLayer(input_dim,...
                                 output_dim,...
                                 hidden_layer_size_arr,...
                                 varargin)
@@ -68,33 +69,41 @@ classdef FFNNLayer
                     obj.Bias_Layers{end+1} = randn(hidden_layer_size_arr(i),...
                                                      1);
                 end
+                
+                if(i~=obj.hidden_layer_num+1)
+                    obj.Recursive_Weight_layers{end+1} = randn(hidden_layer_size_arr(i),...
+                                                               hidden_layer_size_arr(i));                    
+                end
             end 
         end
-        function [h, a_list, h_list] = forward(obj, x)
-            h = x;
-            h_list = {x};
-            a_list = {};
+        function [a, h_list, a_list] = forward(obj, x, prev_a_list)
+            a = x;
+            a_list = {x};
+            y_list = {};
             for i = 1:obj.hidden_layer_num+1
-                a = obj.mulgate.forward(obj.Weight_layers{i}, h);
-                a = obj.addgate.forward(a, obj.Bias_Layers{i});
-                h = obj.activation_fun_obj_list{i}.forward(a);
+                y = obj.mulgate.forward(obj.Weight_layers{i}, a);
+                if(i~=obj.hidden_layer_num+1)
+                    prev_s = obj.mulgate.forward(obj.Recursive_Weight_layers{i}, prev_a_list{i+1});
+                    y = obj.addgate.forward(y, prev_s);
+                end
+                y = obj.addgate.forward(y, obj.Bias_Layers{i});
+                a = obj.activation_fun_obj_list{i}.forward(y);
+                y_list{end+1} = y;
                 a_list{end+1} = a;
-                h_list{end+1} = h;
             end
-           
         end
         % backward computation of neural network
         function  [Weight_layers_delta, Bias_Layers_delta] = backward(obj, x, t, cost_function_obj)
-            [t_hat, a_list, h_list] = obj.forward(x);
+            [t_hat, y_list, a_list] = obj.forward(x);
             
             % calculate gradients of each weight and bias parameters
             gradient = cost_function_obj.backward(t, t_hat);
             Weight_layers_delta ={};
             Bias_Layers_delta = {};
             for i = obj.hidden_layer_num+1:-1:1
-                gradient = obj.activation_fun_obj_list{i}.backward(a_list{i}, gradient);
+                gradient = obj.activation_fun_obj_list{i}.backward(y_list{i}, gradient);
                 b_delta = gradient;
-                [W_delta, gradient] = obj.mulgate.backward(obj.Weight_layers{i}, h_list{i}, gradient);
+                [W_delta, gradient] = obj.mulgate.backward(obj.Weight_layers{i}, a_list{i}, gradient);
                 Weight_layers_delta = [{W_delta}, Weight_layers_delta];
                 Bias_Layers_delta = [{b_delta}, Bias_Layers_delta];
             end
