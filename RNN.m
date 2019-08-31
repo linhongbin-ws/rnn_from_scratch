@@ -21,29 +21,24 @@ classdef RNN
         end
         
         function y_list =  predict(obj, x_list)
-            assert(iscell(x_list) && size(x_list,1), 'x_list should be cell array');
+            assert(iscell(x_list) && size(x_list,1), 'x_list_list should be cell array');
+            assert(obj.is_train==true, 'The network need to be trained before prediction');
+            y_list = {}
             for i= 1:size(x_list,2)
-                x = x_list{i};
-                assert(size(x,1) == obj.net.input_dim, fprintf('dimension of x dosent match in index %d of x_list', i));
-                assert(obj.is_train==true, 'The network need to be trained before prediction');
-
-                y_list = {};
-                for i =1:size(x,2)
-                    y = [];
-                    input_vec = x(:,i);
-                    input_normalized_vec = (input_vec - obj.normalized_struct.input_mean_vec)...
-                                                      ./obj.normalized_struct.input_std_vec;
-                    if(i == 1)  
-                         [output_normalized_vec,~,h_list] = obj.net.forward(input_normalized_vec, obj.net.get_zero_h_list());
-                    else
-                         [output_normalized_vec,~,h_list] = obj.net.forward(input_normalized_vec, h_list);                        
-                    end
-                   
-                    output_vec = output_normalized_vec.*obj.normalized_struct.output_std_vec...
-                                                       +obj.normalized_struct.output_mean_vec;
-                    y = [y, output_vec];    
-                    y_list = [y_list, {y}];
+                x_mat = x_list{i};
+                assert(size(x_mat,1)==obj.net.input_dim, sprintf('input dimension of index %d of x_list dosent match RNN ', i));
+                for k = 1:size(x_mat,2)
+                    x_mat(:,k) = (x_mat(:,k) - obj.normalized_struct.input_mean_vec)...
+                                  ./obj.normalized_struct.input_std_vec;
                 end
+
+                [y_hat_mat, ~, ~] = obj.net.fptt(x_mat);
+                for k = 1:size(y_hat_mat,2)
+                    y_hat_mat(:,k) = y_hat_mat(:,k).*obj.normalized_struct.output_std_vec...
+                                                       +obj.normalized_struct.output_mean_vec;
+                end
+
+                y_list = [y_list, {y_hat_mat}];                
             end
         end
         
@@ -97,7 +92,7 @@ classdef RNN
                     
                     [obj.normalized_struct.output_list,...
                      obj.normalized_struct.output_mean_vec,...
-                     obj.normalized_struct.output_std_vec] = obj.z_score_normalize(Y_train);
+                     obj.normalized_struct.output_std_vec] = obj.z_score_normalize(Y_train_list);
                     Y_train_list = obj.normalized_struct.output_list;
                     
                 otherwise
@@ -122,18 +117,33 @@ classdef RNN
         
         function obj = SGD(obj, X_train_list, Y_train_list)
             count = 0;
-            sample_num = size(X_train,2);
+            sample_num = size(X_train_list,2);
             while(1)
                 for i = 1:sample_num
-                    % calculate gradients of parameters
-                    [Weight_layers_delta, Bias_Layers_delta] = obj.net.backward(X_train(:,i),...
-                                                                                Y_train(:,i),...
-                                                                                obj.cost_function);
-                    % update parameters
-                    for j = 1:size(Weight_layers_delta,2)
-                        obj.net.Weight_layers{j} = obj.net.Weight_layers{j} - obj.learning_rate * Weight_layers_delta{j}/sample_num;
-                        obj.net.Bias_Layers{j} = obj.net.Bias_Layers{j} - obj.learning_rate * Bias_Layers_delta{j}/sample_num;
-                    end
+                    x_mat = X_train_list{i};
+                    y_mat = Y_train_list{i};
+
+                   [Sum_Weight_layers_delta,... 
+                   Sum_Bias_Layers_delta,...
+                   Sum_Recursive_Weight_layers_delta] = obj.net.bptt(x_mat,...
+                                                                 y_mat,...
+                                                                 obj.cost_function);
+                
+                % calculate delta/sample number
+                for k = 1:size(Sum_Weight_layers_delta,2)
+                    Sum_Weight_layers_delta{k} = Sum_Weight_layers_delta{k}./size(X_train_list,2);
+                end
+                for k = 1:size(Sum_Bias_Layers_delta,2)
+                    Sum_Bias_Layers_delta{k} = Sum_Bias_Layers_delta{k}./size(X_train_list,2);
+                end
+                for k = 1:size(Sum_Recursive_Weight_layers_delta,2)
+                    Sum_Recursive_Weight_layers_delta{k} = Sum_Recursive_Weight_layers_delta{k}./size(X_train_list,2);
+                end  
+                    obj.net = obj.net.update_layer_param(Sum_Weight_layers_delta,... 
+                                              Sum_Bias_Layers_delta,...
+                                              Sum_Recursive_Weight_layers_delta,...
+                                              obj.learning_rate);                                      
+                        
                 end
                 count = count + 1;
                 if count>=obj.train_opt_struct.epoch_num
@@ -142,17 +152,19 @@ classdef RNN
                 
                 loss = 0;
                 for i=1:sample_num
-                    y_hat = obj.net.forward(X_train(:,i));
-                    loss = loss + obj.cost_function.forward(Y_train(:,i), y_hat);
+                    loss_t = 0;
+                    sequence_num = size(X_train_list{i},2);
+                    [y_hat_mat, ~, ~] = obj.net.fptt(X_train_list{i});
+                    for j = 1:sequence_num              
+                        loss_t = loss_t + obj.cost_function.forward(X_train_list{i}(:,j), y_hat_mat(:,j));
+                    end
+                    loss = loss + loss_t/sequence_num;
                 end
                 loss = loss/sample_num;
-                fprintf('log of loss is %.5f\n', loss);
+                fprintf('Epoch %d: loss is %.5f\n', count, loss);
             end
         end
-        
-        function [Weight_layers_delta, Bias_Layers_delta,] = SGD(obj, X_train_list, Y_train_list)
-        
-        
+            
         % Z-score normalization
         function [x_normalized_list, mean_vec, std_vec] = z_score_normalize(obj,x_list)
             x_mat = [];
