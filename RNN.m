@@ -156,7 +156,7 @@ classdef RNN
                     sequence_num = size(X_train_list{i},2);
                     [y_hat_mat, ~, ~] = obj.net.fptt(X_train_list{i});
                     for j = 1:sequence_num              
-                        loss_t = loss_t + obj.cost_function.forward(X_train_list{i}(:,j), y_hat_mat(:,j));
+                        loss_t = loss_t + obj.cost_function.forward(Y_train_list{i}(:,j), y_hat_mat(:,j));
                     end
                     loss = loss + loss_t/sequence_num;
                 end
