@@ -119,48 +119,66 @@ classdef RNNLayer
                                                          x_mat,...
                                                          y_mat,...
                                                          cost_function_obj)
-            Sum_Weight_layers_delta ={};
-            Sum_Bias_Layers_delta = {};
-            Sum_Recursive_Weight_layers_delta = {};
-            % calculate the forward propagation through time
-            [~, a_list_list, h_list_list] = fptt(obj, x_mat);
+            % get the zeros of cell list
+            Sum_Weight_layers_delta = obj.Weight_layers;
+            Sum_Bias_Layers_delta = obj.Bias_Layers;
+            Sum_Recursive_Weight_layers_delta = obj.Recursive_Weight_layers;
             
-               
+            for k = 1:size(Sum_Weight_layers_delta,2)
+                Sum_Weight_layers_delta{k} = zeros(size(Sum_Weight_layers_delta{k}));
+            end
+            for k = 1:size(Sum_Bias_Layers_delta,2)
+                Sum_Bias_Layers_delta{k} = zeros(size(Sum_Bias_Layers_delta{k}));
+            end
+            for k = 1:size(Sum_Recursive_Weight_layers_delta,2)
+                Sum_Recursive_Weight_layers_delta{k} = zeros(size(Sum_Recursive_Weight_layers_delta{k}));
+            end
+            
+            % calculate the forward propagation through time
+            [~, a_list_list, h_list_list] = obj.fptt(x_mat);
+            
+            
             for t = size(x_mat,2):-1:1
-                x = x_mat(:,t);
-                y = y_mat(:,t);
-                h_list = h_list_list{t};
-                a_list = a_list_list{t};
-                
-                if (t==1)
-                    h_prev_list = obj.get_zero_h_list();
-                else
-                    h_prev_list = h_list_list{t-1};
-                end
-                
-                if(t==size(x_mat,2))
-                    gradient_list = {};
-                    for i = 1:obj.hidden_layer_num
-                        gradient_list = [gradient_list, zeros(obj.hidden_layer_size_arr(i), 1)];
+                for index = t:-1:1
+                    x = x_mat(:,index);
+                    y = y_mat(:,index);
+                    h_list = h_list_list{index};
+                    a_list = a_list_list{index};
+
+                    if (index==1)
+                        h_prev_list = obj.get_zero_h_list();
+                    else
+                        h_prev_list = h_list_list{index-1};
                     end
-                else
-                    gradient_list = next_gradient_list;
-                end
+
+                    if(index==t)
+                        gradient_list = {};
+                        for k = 1:obj.hidden_layer_num
+                            gradient_list = [gradient_list, zeros(obj.hidden_layer_size_arr(k), 1)];
+                        end
+                    else
+                        gradient_list = next_gradient_list;
+                    end
+                    
+                    if(index==t)
+                        is_time_equal = true;
+                    else
+                        is_time_equal = false;
+                    end
+
+                    [Weight_layers_delta,... 
+                      Bias_Layers_delta,...
+                      Recursive_Weight_layers_delta,...
+                      next_gradient_list] = obj.backward(y,...
+                                                         h_prev_list,...
+                                                         h_list,...
+                                                         a_list,...
+                                                         cost_function_obj,...
+                                                         gradient_list,...
+                                                         is_time_equal);
                 
-                [Weight_layers_delta,... 
-                  Bias_Layers_delta,...
-                  Recursive_Weight_layers_delta,...
-                  next_gradient_list] = obj.backward(y,...
-                                                     h_prev_list,...
-                                                     h_list,...
-                                                     a_list,...
-                                                     cost_function_obj,...
-                                                     gradient_list);
-                if(t==size(x_mat,2))
-                    Sum_Weight_layers_delta = Weight_layers_delta;
-                    Sum_Bias_Layers_delta = Bias_Layers_delta;
-                    Sum_Recursive_Weight_layers_delta = Recursive_Weight_layers_delta;
-                else
+                                                
+                    % sum up the delta of parameters
                     for k = 1:size(Weight_layers_delta,2)
                         Sum_Weight_layers_delta{k} = Sum_Weight_layers_delta{k} + Weight_layers_delta{k};
                     end
@@ -171,18 +189,21 @@ classdef RNNLayer
                         Sum_Recursive_Weight_layers_delta{k} = Sum_Recursive_Weight_layers_delta{k} + Recursive_Weight_layers_delta{k};
                     end
                 end
-                
-                %calculate mean delta
-                for k = 1:size(Sum_Weight_layers_delta,2)
-                    Sum_Weight_layers_delta{k} = Sum_Weight_layers_delta{k}./size(x_mat,2);
-                end
-                for k = 1:size(Sum_Bias_Layers_delta,2)
-                    Sum_Bias_Layers_delta{k} = Sum_Bias_Layers_delta{k}./size(x_mat,2);
-                end
-                for k = 1:size(Sum_Recursive_Weight_layers_delta,2)
-                    Sum_Recursive_Weight_layers_delta{k} = Sum_Recursive_Weight_layers_delta{k}./size(x_mat,2);
-                end                
+
+                               
             end
+            
+            
+            %calculate mean delta
+            for k = 1:size(Sum_Weight_layers_delta,2)
+                Sum_Weight_layers_delta{k} = Sum_Weight_layers_delta{k}./size(x_mat,2);
+            end
+            for k = 1:size(Sum_Bias_Layers_delta,2)
+                Sum_Bias_Layers_delta{k} = Sum_Bias_Layers_delta{k}./size(x_mat,2);
+            end
+            for k = 1:size(Sum_Recursive_Weight_layers_delta,2)
+                Sum_Recursive_Weight_layers_delta{k} = Sum_Recursive_Weight_layers_delta{k}./size(x_mat,2);
+            end 
         end
         
         function [Weight_layers_delta,... 
@@ -194,18 +215,25 @@ classdef RNNLayer
                                                  h_list,...
                                                  a_list,...
                                                  cost_function_obj,...
-                                                 gradient_list)
+                                                 gradient_list,...
+                                                 is_time_equal)
                 % calculate gradients of each weight and bias parameters
                 Weight_layers_delta ={};
                 Bias_Layers_delta = {};
                 Recursive_Weight_layers_delta = {};
                 next_gradient_list = {};
                 gradient = cost_function_obj.backward(y, h_list{end});
+                
+                % when calculate derivative using bptt, output gradient is zeros
+                if(is_time_equal)
+                    gradient = zeros(size(gradient));
+                end
+                
                 for i = obj.hidden_layer_num+1:-1:1
                     gradient = obj.activation_fun_obj_list{i}.backward(a_list{i}, gradient);
 
                     % calculate gradient of Bias_layers
-                    b_delta = gradient;
+                    [gradient, b_delta] = obj.addgate.backward(a_list{i}-obj.Bias_Layers{i}, obj.Bias_Layers{i}, gradient);
                     Bias_Layers_delta = [{b_delta}, Bias_Layers_delta];
 
                     % calculate gradient of Recursive_Weight_layers
