@@ -3,6 +3,7 @@ classdef FFNN
         cost_function
         learning_rate
         train_method
+        update_method
         is_train = false
         normalized_struct
         train_opt_struct
@@ -52,17 +53,20 @@ classdef FFNN
             default_learningRate = 0.1;
             default_epoch_num = 40;
             default_normalized_method = 'zeroscore';
+            default_update_method = 'gradient_descend';
             addRequired(p,'X_train',@ismatrix);
             addRequired(p,'Y_train',@ismatrix);
-            addParameter(p,'TrainMethod',default_train_method,@isstring);
-            addParameter(p,'CostFunction',default_costfunction,@isstring);
+            addParameter(p,'TrainMethod',default_train_method,@ischar);
+            addParameter(p,'CostFunction',default_costfunction,@ischar);
             addParameter(p,'LearningRate',default_learningRate, @isnumeric);
-            addParameter(p,'NormalizedMethod',default_normalized_method, @isstring);
+            addParameter(p,'NormalizedMethod',default_normalized_method, @ischar);
             addParameter(p,'EpochNum',default_epoch_num, @isnumeric)
+            addParameter(p,'UpdateMethod',default_update_method, @ischar);
             parse(p, X_train, Y_train, varargin{:});          
             obj.train_method = p.Results.TrainMethod;
             cost_function_str = p.Results.CostFunction;
             obj.learning_rate = p.Results.LearningRate;
+            obj.update_method = p.Results.UpdateMethod;
             obj.cost_function = get_element_instance(cost_function_str);
             obj.is_train =true;
             obj.normalized_struct = [];
@@ -119,10 +123,18 @@ classdef FFNN
                                                                                 Y_train(:,i),...
                                                                                 obj.cost_function);
                     % update parameters
-                    for j = 1:size(Weight_layers_delta,2)
-                        obj.net.Weight_layers{j} = obj.net.Weight_layers{j} - obj.learning_rate * Weight_layers_delta{j}/sample_num;
-                        obj.net.Bias_Layers{j} = obj.net.Bias_Layers{j} - obj.learning_rate * Bias_Layers_delta{j}/sample_num;
-                    end
+                    switch lower(obj.update_method)
+                        case 'gradient_descend'
+                            obj.net = obj.gradient_decent(obj.net,...
+                                    Weight_layers_delta,... 
+                                    Bias_Layers_delta,...
+                                    obj.learning_rate,...
+                                    1/sample_num);            
+                        otherwise
+                            error(fprintf('method %s is not supported', obj.train_method))
+                    end 
+            
+
                 end
                 count = count + 1;
                 if count>=obj.train_opt_struct.epoch_num
@@ -135,8 +147,25 @@ classdef FFNN
                     loss = loss + obj.cost_function.forward(Y_train(:,i), y_hat);
                 end
                 loss = loss/sample_num;
-                fprintf('log of loss is %.5f\n', loss);
+                fprintf('Epoch number %d: log of loss is %.5f\n', count, loss);
             end
+        end
+        
+       function net = gradient_decent(obj,...
+                            net,...
+                            Weight_layers_delta,... 
+                            Bias_Layers_delta,...
+                            learning_rate,...
+                            weight)
+            for i = 1:size(Weight_layers_delta,2)
+                net.Weight_layers{i} = net.Weight_layers{i}...
+                                    - learning_rate * Weight_layers_delta{i}*weight;
+            end
+                
+            for i = 1:size(Bias_Layers_delta,2)
+                net.Bias_Layers{i} = net.Bias_Layers{i} ...
+                                    - learning_rate * Bias_Layers_delta{i}*weight;
+            end 
         end
         
         
