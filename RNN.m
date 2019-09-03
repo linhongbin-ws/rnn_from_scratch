@@ -27,15 +27,17 @@ classdef RNN
             for i= 1:size(x_list,2)
                 x_mat = x_list{i};
                 assert(size(x_mat,1)==obj.net.input_dim, sprintf('input dimension of index %d of x_list dosent match RNN ', i));
+                x_mat_normalized = [];
                 for k = 1:size(x_mat,2)
-                    x_mat(:,k) = (x_mat(:,k) - obj.normalized_struct.input_mean_vec)...
-                                  ./obj.normalized_struct.input_std_vec;
+                    x_normalized = (x_mat(:,k) - obj.normalized_struct.input_mean_vec)./obj.normalized_struct.input_std_vec;
+                    x_mat_normalized = [x_mat_normalized, x_normalized];
                 end
 
-                [y_hat_mat, ~, ~] = obj.net.fptt(x_mat);
-                for k = 1:size(y_hat_mat,2)
-                    y_hat_mat(:,k) = y_hat_mat(:,k).*obj.normalized_struct.output_std_vec...
-                                                       +obj.normalized_struct.output_mean_vec;
+                [y_hat_mat_normalized, ~, ~] = obj.net.fptt(x_mat_normalized);
+                y_hat_mat = [];
+                for k = 1:size(y_hat_mat_normalized,2)
+                    y_hat = (y_hat_mat_normalized(:,k).*obj.normalized_struct.output_std_vec) +obj.normalized_struct.output_mean_vec
+                    y_hat_mat = [y_hat_mat, y_hat];
                 end
 
                 y_list = [y_list, {y_hat_mat}];                
