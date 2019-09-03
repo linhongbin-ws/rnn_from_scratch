@@ -129,21 +129,24 @@ classdef RNN
                                                                  y_mat,...
                                                                  obj.cost_function);
                 
-                % calculate delta/sample number
-                for k = 1:size(Sum_Weight_layers_delta,2)
-                    Sum_Weight_layers_delta{k} = Sum_Weight_layers_delta{k}./size(X_train_list,2);
-                end
-                for k = 1:size(Sum_Bias_Layers_delta,2)
-                    Sum_Bias_Layers_delta{k} = Sum_Bias_Layers_delta{k}./size(X_train_list,2);
-                end
-                for k = 1:size(Sum_Recursive_Weight_layers_delta,2)
-                    Sum_Recursive_Weight_layers_delta{k} = Sum_Recursive_Weight_layers_delta{k}./size(X_train_list,2);
-                end  
-                    obj.net = obj.net.update_layer_param(Sum_Weight_layers_delta,... 
+                    % calculate delta/sample number
+                    for k = 1:size(Sum_Weight_layers_delta,2)
+                        Sum_Weight_layers_delta{k} = Sum_Weight_layers_delta{k}./size(X_train_list,2);
+                    end
+                    for k = 1:size(Sum_Bias_Layers_delta,2)
+                        Sum_Bias_Layers_delta{k} = Sum_Bias_Layers_delta{k}./size(X_train_list,2);
+                    end
+                    for k = 1:size(Sum_Recursive_Weight_layers_delta,2)
+                        Sum_Recursive_Weight_layers_delta{k} = Sum_Recursive_Weight_layers_delta{k}./size(X_train_list,2);
+                    end
+
+
+                    obj.net = obj.gradient_decent(obj.net,...
+                                              Sum_Weight_layers_delta,... 
                                               Sum_Bias_Layers_delta,...
                                               Sum_Recursive_Weight_layers_delta,...
                                               obj.learning_rate);                                      
-                        
+
                 end
                 count = count + 1;
                 if count>=obj.train_opt_struct.epoch_num
@@ -182,6 +185,29 @@ classdef RNN
                     x_normalized = [x_normalized,(x(:,i) - mean_vec) ./ std_vec];
                 end
                 x_normalized_list = [x_normalized_list, {x_normalized}];
+            end
+        end
+        
+        
+        function net = gradient_decent(obj,...
+                            net,...
+                            Weight_layers_delta,... 
+                            Bias_Layers_delta,...
+                            Recursive_Weight_layers_delta,...
+                            learning_rate)
+            for i = 1:size(Weight_layers_delta,2)
+                net.Weight_layers{i} = net.Weight_layers{i}...
+                                        - learning_rate * Weight_layers_delta{i};
+            end
+                
+            for i = 1:size(Bias_Layers_delta,2)
+                net.Bias_Layers{i} = net.Bias_Layers{i} ...
+                                    - learning_rate * Bias_Layers_delta{i};
+            end
+            
+             for i = 1:size(Recursive_Weight_layers_delta,2)
+                 net.Recursive_Weight_layers{i} = net.Recursive_Weight_layers{i} ...
+                                                  - learning_rate * Recursive_Weight_layers_delta{i};
             end
         end
     end

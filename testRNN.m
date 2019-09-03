@@ -1,7 +1,7 @@
 load('./data/Real_Joint4_10Reps/Real_Joint4_10Reps_pos.mat');
 load('./data/Real_Joint4_10Reps/Real_Joint4_10Reps_tor.mat');
-train_input_mat = input_mat(4,:);
-train_output_mat = output_mat(4,:);
+train_input_mat = input_mat(4,1:500);
+train_output_mat = output_mat(4,1:500);
 
 
 fixWindowLength = 8;
@@ -20,7 +20,7 @@ net = RNN(1,1,[20],'activation_fun_str_list',{'tanh','purelin'});
 net = net.train(train_input_cell,...
                 train_output_cell,...
                 'EpochNum',40,...
-                'LearningRate',1);
+                'LearningRate',0.1);
 
 test_input_cell = {train_input_mat};
 y_hat_list = net.predict(train_input_cell);

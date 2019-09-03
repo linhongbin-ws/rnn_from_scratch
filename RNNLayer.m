@@ -225,7 +225,7 @@ classdef RNNLayer
                 gradient = cost_function_obj.backward(y, h_list{end});
                 
                 % when calculate derivative using bptt, output gradient is zeros
-                if(is_time_equal)
+                if(~is_time_equal)
                     gradient = zeros(size(gradient));
                 end
                 
@@ -253,27 +253,6 @@ classdef RNNLayer
                         gradient = gradient + gradient_list{i-1};
                     end
                 end
-        end
-        
-        function obj = update_layer_param(obj,...
-                                    Weight_layers_delta,... 
-                                    Bias_Layers_delta,...
-                                    Recursive_Weight_layers_delta,...
-                                    learning_rate)
-            for i = 1:size(Weight_layers_delta,2)
-                obj.Weight_layers{i} = obj.Weight_layers{i}...
-                                        - learning_rate * Weight_layers_delta{i};
-            end
-                
-            for i = 1:size(Bias_Layers_delta,2)
-                obj.Bias_Layers{i} = obj.Bias_Layers{i} ...
-                                    - learning_rate * Bias_Layers_delta{i};
-            end
-            
-             for i = 1:size(Recursive_Weight_layers_delta,2)
-                 obj.Recursive_Weight_layers{i} = obj.Recursive_Weight_layers{i} ...
-                                                  - learning_rate * Recursive_Weight_layers_delta{i};
-            end
         end
         
         function h_list = get_zero_h_list(obj)
