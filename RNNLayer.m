@@ -257,7 +257,7 @@ classdef RNNLayer
         
         function h_list = get_zero_h_list(obj)
             h_list = {zeros(obj.input_dim,1)};
-            for i = 1:size(obj.hidden_layer_num)
+            for i = 1:obj.hidden_layer_num
                 h_list = [h_list, {zeros(obj.hidden_layer_size_arr(i),1)}];
             end
             h_list = [h_list, {zeros(obj.output_dim,1)}];

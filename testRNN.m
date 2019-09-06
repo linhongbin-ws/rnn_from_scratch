@@ -2,9 +2,10 @@ load('./data/Real_Joint4_10Reps/Real_Joint4_10Reps_pos.mat');
 load('./data/Real_Joint4_10Reps/Real_Joint4_10Reps_tor.mat');
 train_input_mat = input_mat(4,1:500);
 train_output_mat = output_mat(4,1:500);
+train_input_mat = train_input_mat(1:4:end)
+train_output_mat = train_output_mat(1:4:end)
 
-
-fixWindowLength = 8;
+fixWindowLength = 3;
 train_input_cell = {};
 train_output_cell = {};
 % cut data into cells with fix window
@@ -16,10 +17,11 @@ train_input_cell = train_input_cell.';
 train_output_cell = train_output_cell.';
 
 
-net = RNN(1,1,[10],'activation_fun_str_list',{'tanh','purelin'});
+net = RNN(1,1,[10,5],'activation_fun_str_list',{'tanh','tanh','purelin'});
+%net = RNN(1,1,[10],'activation_fun_str_list',{'relu','purelin'});
 net = net.train(train_input_cell,...
                 train_output_cell,...
-                'EpochNum',100,...
+                'EpochNum',500,...
                 'LearningRate',0.3);
 
 test_input_cell = {train_input_mat};

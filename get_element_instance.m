@@ -12,7 +12,8 @@ function instance = get_element_instance(str)
           instance = SigmoidMap();
         case 'quadratic'
           instance = QuadraticLoss();                  
-
+        case 'relu'
+          instance =  ReLUMap();
        otherwise
           error('cannot recogize %s in get_gate_instance function',str);
     end
