@@ -54,6 +54,7 @@ classdef FFNN
             default_epoch_num = 40;
             default_normalized_method = 'zeroscore';
             default_update_method = 'gradient_descend';
+            default_fz_layer_index_arr = [];
             addRequired(p,'X_train',@ismatrix);
             addRequired(p,'Y_train',@ismatrix);
             addParameter(p,'TrainMethod',default_train_method,@ischar);
@@ -62,6 +63,7 @@ classdef FFNN
             addParameter(p,'NormalizedMethod',default_normalized_method, @ischar);
             addParameter(p,'EpochNum',default_epoch_num, @isnumeric)
             addParameter(p,'UpdateMethod',default_update_method, @ischar);
+            addParameter(p,'FreezeLayer', default_fz_layer_index_arr, @ismatrix);
             parse(p, X_train, Y_train, varargin{:});          
             obj.train_method = p.Results.TrainMethod;
             cost_function_str = p.Results.CostFunction;
@@ -72,6 +74,7 @@ classdef FFNN
             obj.normalized_struct = [];
             obj.normalized_struct.normalized_method = p.Results.NormalizedMethod;
             obj.train_opt_struct.epoch_num = p.Results.EpochNum;
+            obj.train_opt_struct.freeze_layer_arr = p.Results.FreezeLayer;
 
             
             assert(size(X_train,1) == obj.net.input_dim, 'dimension of X_train dosent match');
@@ -116,12 +119,30 @@ classdef FFNN
         function obj = SGD(obj, X_train, Y_train)
             count = 0;
             sample_num = size(X_train,2);
+            
+            % set freeze layer
+            Weight_layers_ratio = {};
+            for i = 1:size(obj.net.Weight_layers,2)
+                Weight_layers_ratio = [Weight_layers_ratio, {ones(size(obj.net.Weight_layers{i}))}];
+            end
+            Bias_Layers_ratio = {};
+            for i = 1:size(obj.net.Bias_Layers,2)
+                Bias_Layers_ratio = [Bias_Layers_ratio, {ones(size(obj.net.Bias_Layers{i}))}];
+            end
+
+            for i=1:size(obj.train_opt_struct.freeze_layer_arr,2)
+                index = obj.train_opt_struct.freeze_layer_arr(i);
+                Weight_layers_ratio{index} = zeros(size(Weight_layers_ratio{index}));
+                Bias_Layers_ratio{index} = zeros(size(Bias_Layers_ratio{index}));
+            end
+            
             while(1)
                 for i = 1:sample_num
                     % calculate gradients of parameters
                     [Weight_layers_delta, Bias_Layers_delta] = obj.net.backward(X_train(:,i),...
                                                                                 Y_train(:,i),...
                                                                                 obj.cost_function);
+
                     % update parameters
                     switch lower(obj.update_method)
                         case 'gradient_descend'
@@ -129,7 +150,9 @@ classdef FFNN
                                     Weight_layers_delta,... 
                                     Bias_Layers_delta,...
                                     obj.learning_rate,...
-                                    sample_num);            
+                                    sample_num,...
+                                    Weight_layers_ratio,...
+                                    Bias_Layers_ratio);            
                         otherwise
                             error(fprintf('method %s is not supported', obj.train_method))
                     end 
@@ -160,16 +183,16 @@ classdef FFNN
                             Weight_layers_ratio,...
                             Bias_Layers_ratio)
           % update with ratio 1 by default
-            if ~exist('Weight_layers_ratio','var') || ~exist('Bias_Layers_ratio','var')
-                Weight_layers_ratio = {};
-                for i = 1:size(Weight_layers_delta,2)
-                    Weight_layers_ratio = [Weight_layers_ratio, {ones(size(Weight_layers_delta{i}))}];
-                end
-                Bias_Layers_ratio = {};
-                for i = 1:size(Bias_Layers_delta,2)
-                    Bias_Layers_ratio = [Bias_Layers_ratio, {ones(size(Bias_Layers_delta{i}))}];
-                end
-            end
+%             if ~exist('Weight_layers_ratio','var') || ~exist('Bias_Layers_ratio','var')
+%                 Weight_layers_ratio = {};
+%                 for i = 1:size(Weight_layers_delta,2)
+%                     Weight_layers_ratio = [Weight_layers_ratio, {ones(size(Weight_layers_delta{i}))}];
+%                 end
+%                 Bias_Layers_ratio = {};
+%                 for i = 1:size(Bias_Layers_delta,2)
+%                     Bias_Layers_ratio = [Bias_Layers_ratio, {ones(size(Bias_Layers_delta{i}))}];
+%                 end
+%             end
             
             for i = 1:size(Weight_layers_delta,2)
                 net.Weight_layers{i} = net.Weight_layers{i}...
