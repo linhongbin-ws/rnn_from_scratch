@@ -2,7 +2,7 @@
 net = FFNN(1,1,[30],'activation_fun_str_list',{'tanh','purelin'});
 net = net.train(x, t,...
                 'EpochNum',2000,...
-                'LearningRate',0.1);
+                'LearningRate',3);
 t_hat = net.predict(x);
 figure
 hold on

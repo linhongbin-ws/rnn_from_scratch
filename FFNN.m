@@ -178,7 +178,7 @@ classdef FFNN
                 
             for i = 1:size(Bias_Layers_delta,2)
                 net.Bias_Layers{i} = net.Bias_Layers{i} ...
-                                    - (learning_rate * Bias_Layers_delta{i}/sample_num).*Bias_Layers_delta{i};
+                                    - (learning_rate * Bias_Layers_delta{i}/sample_num).*Bias_Layers_ratio{i};
             end 
        end
         
