@@ -129,7 +129,7 @@ classdef FFNN
                                     Weight_layers_delta,... 
                                     Bias_Layers_delta,...
                                     obj.learning_rate,...
-                                    1/sample_num);            
+                                    sample_num);            
                         otherwise
                             error(fprintf('method %s is not supported', obj.train_method))
                     end 
@@ -156,35 +156,63 @@ classdef FFNN
                             Weight_layers_delta,... 
                             Bias_Layers_delta,...
                             learning_rate,...
-                            weight)
+                            sample_num,...
+                            Weight_layers_ratio,...
+                            Bias_Layers_ratio)
+          % update with ratio 1 by default
+            if ~exist('Weight_layers_ratio','var') || ~exist('Bias_Layers_ratio','var')
+                Weight_layers_ratio = {};
+                for i = 1:size(Weight_layers_delta,2)
+                    Weight_layers_ratio = [Weight_layers_ratio, {ones(size(Weight_layers_delta{i}))}];
+                end
+                Bias_Layers_ratio = {};
+                for i = 1:size(Bias_Layers_delta,2)
+                    Bias_Layers_ratio = [Bias_Layers_ratio, {ones(size(Bias_Layers_delta{i}))}];
+                end
+            end
+            
             for i = 1:size(Weight_layers_delta,2)
                 net.Weight_layers{i} = net.Weight_layers{i}...
-                                    - learning_rate * Weight_layers_delta{i}*weight;
+                                    - (learning_rate * Weight_layers_delta{i}/sample_num).*Weight_layers_ratio{i};
             end
                 
             for i = 1:size(Bias_Layers_delta,2)
                 net.Bias_Layers{i} = net.Bias_Layers{i} ...
-                                    - learning_rate * Bias_Layers_delta{i}*weight;
+                                    - (learning_rate * Bias_Layers_delta{i}/sample_num).*Bias_Layers_delta{i};
             end 
        end
         
        % update using Levenberg-Marquardt method
-        function net = LM(obj,...
-                            net,...
-                            Weight_layers_delta,... 
-                            Bias_Layers_delta,...
-                            learning_rate,...
-                            weight)
-            for i = 1:size(Weight_layers_delta,2)
-                net.Weight_layers{i} = net.Weight_layers{i}...
-                                    - learning_rate * Weight_layers_delta{i}*weight;
-            end
-                
-            for i = 1:size(Bias_Layers_delta,2)
-                net.Bias_Layers{i} = net.Bias_Layers{i} ...
-                                    - learning_rate * Bias_Layers_delta{i}*weight;
-            end 
-        end
+%         function net = LM(obj,...
+%                             net,...
+%                             Weight_layers_delta,... 
+%                             Bias_Layers_delta,...
+%                             learning_rate,...
+%                             Weight_layers_ratio,...
+%                             Bias_Layers_ratio)
+%                         
+%             % update with ratio 1 by default
+%             if ~exist('Weight_layers_ratio','var') || ~exist('Bias_Layers_ratio','var')
+%                 Weight_layers_ratio = {};
+%                 for i = 1:size(Weight_layers_delta,2)
+%                     Weight_layers_ratio = [Weight_layers_ratio, {ones(size(Weight_layers_delta{i}))}];
+%                 end
+%                 Bias_Layers_ratio = {};
+%                 for i = 1:size(Bias_Layers_delta,2)
+%                     Bias_Layers_ratio = [Bias_Layers_ratio, {ones(size(Bias_Layers_delta{i}))}];
+%                 end
+%             end
+%             
+%             for i = 1:size(Weight_layers_delta,2)
+%                 net.Weight_layers{i} = net.Weight_layers{i}...
+%                                     - (learning_rate * Weight_layers_delta{i}*weight).*Weight_layers_ratio{i};
+%             end
+%                 
+%             for i = 1:size(Bias_Layers_delta,2)
+%                 net.Bias_Layers{i} = net.Bias_Layers{i} ...
+%                                     - (learning_rate * Bias_Layers_delta{i}*weight).*Bias_Layers_delta{i};
+%             end 
+%         end
         
         
         % Z-score normalization
