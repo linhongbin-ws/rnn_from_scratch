@@ -168,12 +168,20 @@ classdef FFNN
                                                     Y_train(:,i),...
                                                     obj.cost_function);
                     for i = 1:size(Weight_layers_delta,2)
-                        Weight_layers_delta{i} = Weight_layers_delta{i} + W_d{i}./sample_num;
+                        Weight_layers_delta{i} = Weight_layers_delta{i} + W_d{i};
                     end
                     for i = 1:size(Bias_Layers_delta,2)
-                        Bias_Layers_delta{i} = Bias_Layers_delta{i} + B_d{i}./sample_num;
+                        Bias_Layers_delta{i} = Bias_Layers_delta{i} + B_d{i};
                     end                                                                                                  
                 end
+                
+                % normalize to stardard delta
+                for i = 1:size(Weight_layers_delta,2)
+                    Weight_layers_delta{i} = Weight_layers_delta{i}./sample_num./obj.net.output_dim;
+                end
+                for i = 1:size(Bias_Layers_delta,2)
+                    Bias_Layers_delta{i} = Bias_Layers_delta{i}./sample_num./obj.net.output_dim;
+                end     
                                          
                 % optimized by adaptive methods
                 if (obj.adapt_method_struct.isAdapt)
@@ -230,7 +238,7 @@ classdef FFNN
                     y_hat = obj.net.forward(X_train(:,i));
                     loss = loss + obj.cost_function.forward(Y_train(:,i), y_hat);
                 end
-                loss = loss/sample_num;
+                loss = loss/sample_num/obj.net.output_dim;
                 fprintf('Epoch number %d: log of loss is %.5f\n', count, loss);
             end
         end
