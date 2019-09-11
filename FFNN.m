@@ -117,12 +117,14 @@ classdef FFNN
             
             % choose type of training method
             switch upper(obj.train_method)
+                % stochastic gradient descent
                 case 'SGD'
                     obj = obj.SGD(X_train, Y_train);              
                 case 'BGD'
-                    obj = obj.BGD(X_train, Y_train);             
-                case 'MBGD'
-                    obj = obj.MBGD(X_train, Y_train);
+                    obj = obj.BGD(X_train, Y_train);  
+                % gradient descent    
+                case 'GD'
+                    obj = obj.GD(X_train, Y_train);
                 otherwise
                     error(fprintf('method %s is not supported', obj.train_method))
             end                    
@@ -132,7 +134,47 @@ classdef FFNN
     methods(Access=protected)
         
         function obj = SGD(obj, X_train, Y_train)
-            count = 0;
+            count =  0;
+            random_idx = randperm(size(X_train,2));
+            X_train = X_train(random_idx);
+            Y_train = Y_train(random_idx);
+            while(1) 
+                for i = 1:size(X_train,2)
+                    obj = update_batch(obj, X_train(:,i), Y_train(:,i));
+                end
+                count = count + 1;
+                if count>=obj.train_opt_struct.epoch_num
+                    break
+                end
+                loss = 0;
+                for i=1:size(X_train,2)
+                    y_hat = obj.net.forward(X_train(:,i));
+                    loss = loss + obj.cost_function.forward(Y_train(:,i), y_hat);
+                end
+                loss = loss/size(X_train,2)/obj.net.output_dim;
+                fprintf('Epoch number %d: log of loss is %.5f\n', count, loss);
+            end
+        end
+        
+          function obj = GD(obj, X_train, Y_train)
+            count =  0;
+            while(1) 
+                obj = update_batch(obj, X_train, Y_train);
+                count = count + 1;
+                if count>=obj.train_opt_struct.epoch_num
+                    break
+                end
+                loss = 0;
+                for i=1:size(X_train,2)
+                    y_hat = obj.net.forward(X_train(:,i));
+                    loss = loss + obj.cost_function.forward(Y_train(:,i), y_hat);
+                end
+                loss = loss/size(X_train,2)/obj.net.output_dim;
+                fprintf('Epoch number %d: log of loss is %.5f\n', count, loss);
+            end
+        end
+            
+        function obj = update_batch(obj, X_train, Y_train)  
             sample_num = size(X_train,2);
             
             % set freeze layer
@@ -151,96 +193,81 @@ classdef FFNN
                 Bias_Layers_ratio{index} = zeros(size(Bias_Layers_ratio{index}));
             end
             
-            while(1)                      
-                % initial delta to zeros
-                Weight_layers_delta = {};
-                for i = 1:size(obj.net.Weight_layers,2)
-                    Weight_layers_delta = [Weight_layers_delta, {zeros(size(obj.net.Weight_layers{i}))}];
-                end
-                Bias_Layers_delta = {};
-                for i = 1:size(obj.net.Bias_Layers,2)
-                    Bias_Layers_delta = [Bias_Layers_delta, {zeros(size(obj.net.Bias_Layers{i}))}];
-                end
+                   
+            % initial delta to zeros
+            Weight_layers_delta = {};
+            for i = 1:size(obj.net.Weight_layers,2)
+                Weight_layers_delta = [Weight_layers_delta, {zeros(size(obj.net.Weight_layers{i}))}];
+            end
+            Bias_Layers_delta = {};
+            for i = 1:size(obj.net.Bias_Layers,2)
+                Bias_Layers_delta = [Bias_Layers_delta, {zeros(size(obj.net.Bias_Layers{i}))}];
+            end
                 
-                % calculate mean of stochastic gradient
-                for i = 1:sample_num
-                    [W_d, B_d] = obj.net.backward(X_train(:,i),...
-                                                    Y_train(:,i),...
-                                                    obj.cost_function);
-                    for i = 1:size(Weight_layers_delta,2)
-                        Weight_layers_delta{i} = Weight_layers_delta{i} + W_d{i};
-                    end
-                    for i = 1:size(Bias_Layers_delta,2)
-                        Bias_Layers_delta{i} = Bias_Layers_delta{i} + B_d{i};
-                    end                                                                                                  
-                end
-                
-                % normalize to stardard delta
+            % sum of gradient
+            for i = 1:sample_num
+                [W_d, B_d] = obj.net.backward(X_train(:,i),...
+                                                Y_train(:,i),...
+                                                obj.cost_function);
                 for i = 1:size(Weight_layers_delta,2)
-                    Weight_layers_delta{i} = Weight_layers_delta{i}./sample_num./obj.net.output_dim;
+                    Weight_layers_delta{i} = Weight_layers_delta{i} + W_d{i};
                 end
                 for i = 1:size(Bias_Layers_delta,2)
-                    Bias_Layers_delta{i} = Bias_Layers_delta{i}./sample_num./obj.net.output_dim;
-                end     
-                                         
-                % optimized by adaptive methods
-                if (obj.adapt_method_struct.isAdapt)
-                    % vectorize the gradients of Weight and bias 
-                    gradient_vec = [];
-                    for i =1:numel(Weight_layers_delta)
-                        gradient_vec = [gradient_vec; Weight_layers_delta{i}(:)];
-                    end
-                    for i =1:numel(Bias_Layers_delta)
-                        gradient_vec = [gradient_vec; Bias_Layers_delta{i}(:)];
-                    end    
-
-                    obj.adapt_method_struct.adapt_obj = ...
-                        obj.adapt_method_struct.adapt_obj.update_state(gradient_vec);
-                    delta_vec = obj.adapt_method_struct.adapt_obj.compute_delta();
-
-                    % reverse gradient vector to weight and bias
-                    n = 0;
-                    for i =1:numel(Weight_layers_delta)
-                        num = numel(Weight_layers_delta{i});
-                        Weight_layers_delta{i} = reshape(delta_vec(n+1:n+num),...
-                                                        [size(Weight_layers_delta{i},1),size(Weight_layers_delta{i},2)]);
-                        n = n + num;
-                    end
-                    for i =1:numel(Bias_Layers_delta)
-                        num = numel(Bias_Layers_delta{i});
-                        Bias_Layers_delta{i} = reshape(delta_vec(n+1:n+num),...
-                                                        [size(Bias_Layers_delta{i},1),size(Bias_Layers_delta{i},2)]);
-                        n = n + num;
-                    end                 
-                end
-
-                % update parameters
-                switch lower(obj.update_method)
-                    case 'gradient_descend'
-                        obj.net = obj.gradient_decent(obj.net,...
-                                Weight_layers_delta,... 
-                                Bias_Layers_delta,...
-                                obj.learning_rate,...
-                                Weight_layers_ratio,...
-                                Bias_Layers_ratio);            
-                    otherwise
-                        error(fprintf('method %s is not supported', obj.train_method))
-                end 
-
-
-                count = count + 1;
-                if count>=obj.train_opt_struct.epoch_num
-                    break
-                end
-                
-                loss = 0;
-                for i=1:sample_num
-                    y_hat = obj.net.forward(X_train(:,i));
-                    loss = loss + obj.cost_function.forward(Y_train(:,i), y_hat);
-                end
-                loss = loss/sample_num/obj.net.output_dim;
-                fprintf('Epoch number %d: log of loss is %.5f\n', count, loss);
+                    Bias_Layers_delta{i} = Bias_Layers_delta{i} + B_d{i};
+                end                                                                                                  
             end
+                
+            % normalize to stardard gradient
+            for i = 1:size(Weight_layers_delta,2)
+                Weight_layers_delta{i} = Weight_layers_delta{i}./sample_num./obj.net.output_dim;
+            end
+            for i = 1:size(Bias_Layers_delta,2)
+                Bias_Layers_delta{i} = Bias_Layers_delta{i}./sample_num./obj.net.output_dim;
+            end     
+                                         
+            % optimized by adaptive methods
+            if (obj.adapt_method_struct.isAdapt)
+                % vectorize the gradients of Weight and bias 
+                gradient_vec = [];
+                for i =1:numel(Weight_layers_delta)
+                    gradient_vec = [gradient_vec; Weight_layers_delta{i}(:)];
+                end
+                for i =1:numel(Bias_Layers_delta)
+                    gradient_vec = [gradient_vec; Bias_Layers_delta{i}(:)];
+                end    
+
+                obj.adapt_method_struct.adapt_obj = ...
+                    obj.adapt_method_struct.adapt_obj.update_state(gradient_vec);
+                delta_vec = obj.adapt_method_struct.adapt_obj.compute_delta();
+
+                % reverse gradient vector to weight and bias
+                n = 0;
+                for i =1:numel(Weight_layers_delta)
+                    num = numel(Weight_layers_delta{i});
+                    Weight_layers_delta{i} = reshape(delta_vec(n+1:n+num),...
+                                                    [size(Weight_layers_delta{i},1),size(Weight_layers_delta{i},2)]);
+                    n = n + num;
+                end
+                for i =1:numel(Bias_Layers_delta)
+                    num = numel(Bias_Layers_delta{i});
+                    Bias_Layers_delta{i} = reshape(delta_vec(n+1:n+num),...
+                                                    [size(Bias_Layers_delta{i},1),size(Bias_Layers_delta{i},2)]);
+                    n = n + num;
+                end                 
+            end
+
+            % update parameters
+            switch lower(obj.update_method)
+                case 'gradient_descend'
+                    obj.net = obj.gradient_decent(obj.net,...
+                            Weight_layers_delta,... 
+                            Bias_Layers_delta,...
+                            obj.learning_rate,...
+                            Weight_layers_ratio,...
+                            Bias_Layers_ratio);            
+                otherwise
+                    error(fprintf('method %s is not supported', obj.train_method))
+            end 
         end
         
        function net = gradient_decent(obj,...
