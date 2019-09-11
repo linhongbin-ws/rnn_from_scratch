@@ -121,7 +121,7 @@ classdef FFNN
                 case 'SGD'
                     obj = obj.SGD(X_train, Y_train);              
                 case 'BGD'
-                    obj = obj.BGD(X_train, Y_train);  
+                    obj = obj.BGD(X_train, Y_train,0.1);  
                 % gradient descent    
                 case 'GD'
                     obj = obj.GD(X_train, Y_train);
@@ -155,8 +155,46 @@ classdef FFNN
                 fprintf('Epoch number %d: log of loss is %.5f\n', count, loss);
             end
         end
-        
-          function obj = GD(obj, X_train, Y_train)
+  
+        function obj = BGD(obj, X_train, Y_train, partition_ratio)
+            count =  0;
+            random_idx = randperm(size(X_train,2));
+            X_train = X_train(random_idx);
+            Y_train = Y_train(random_idx);
+            
+            % find the nearest integer number on the right
+            batch_size = fix(size(X_train,2)*partition_ratio)+1;
+            batch_index_list = {};
+            count = 0;
+            for i = 1:fix(size(X_train,2)/batch_size)
+                if (i == fix(size(X_train,2)/batch_size))
+                    batch_index_list = [batch_index_list, {count+1:1:size(X_train,2)}];
+                    count = count + size(batch_index_list{end},2);
+                else
+                    batch_index_list = [batch_index_list, {count+1:1:count+batch_size}];
+                    count = count + batch_size;
+                end
+            end
+            
+            while(1) 
+                for i = 1:size(batch_index_list,2)
+                    obj = update_batch(obj, X_train(:,batch_index_list{i}), Y_train(:,batch_index_list{i}));
+                end
+                count = count + 1;
+                if count>=obj.train_opt_struct.epoch_num
+                    break
+                end
+                loss = 0;
+                for i=1:size(X_train,2)
+                    y_hat = obj.net.forward(X_train(:,i));
+                    loss = loss + obj.cost_function.forward(Y_train(:,i), y_hat);
+                end
+                loss = loss/size(X_train,2)/obj.net.output_dim;
+                fprintf('Epoch number %d: log of loss is %.5f\n', count, loss);
+            end
+        end
+
+      function obj = GD(obj, X_train, Y_train)
             count =  0;
             while(1) 
                 obj = update_batch(obj, X_train, Y_train);
