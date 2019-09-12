@@ -71,6 +71,7 @@ classdef FFNN
             addParameter(p,'UpdateMethod',default_update_method, @ischar);
             addParameter(p,'FreezeLayer', default_fz_layer_index_arr, @ismatrix);
             addParameter(p,'AdaptMethod', default_adapt_method, @ischar);
+            addParameter(p,'PenaltyMethod', [], @ischar);
             parse(p, X_train, Y_train, varargin{:});          
             obj.train_method = p.Results.TrainMethod;
             cost_function_str = p.Results.CostFunction;
@@ -82,6 +83,7 @@ classdef FFNN
             obj.train_opt_struct.epoch_num = p.Results.EpochNum;
             obj.train_opt_struct.freeze_layer_arr = p.Results.FreezeLayer;
             obj.adapt_method_struct.adapt_method = p.Results.AdaptMethod;
+            obj.train_opt_struct.penalty_struct.penalty_method = p.Results.PenaltyMethod;
            
             % default setting
             obj.train_opt_struct.train_ratio = 0.8;
@@ -103,7 +105,26 @@ classdef FFNN
                 obj.adapt_method_struct.isAdapt = false;
             end
              obj.train_opt_struct.input_data = X_train;
-             obj.train_opt_struct.output_data = Y_train;    
+             obj.train_opt_struct.output_data = Y_train;   
+             
+           % choose type of penalty method
+           if(isempty(obj.train_opt_struct.penalty_struct.penalty_method))
+               obj.train_opt_struct.penalty_struct.is_penalty = false;
+           else        
+               switch lower(obj.train_opt_struct.penalty_struct.penalty_method)
+                    % stochastic gradient descent
+                    case 'l2weight'
+                        obj.train_opt_struct.penalty_struct.method_obj = L2WeightLoss();    
+                        obj.train_opt_struct.penalty_struct.alpha = 0.001;
+                     case 'l1weight'
+                        obj.train_opt_struct.penalty_struct.method_obj = L1WeightLoss();    
+                        obj.train_opt_struct.penalty_struct.alpha = 0.001;
+                    otherwise
+                        error(fprintf('method %s is not supported', obj.train_method))
+               end   
+                obj.train_opt_struct.penalty_struct.is_penalty = true;
+           end
+           
         end
         function obj = start_train(obj)
             % partition training and validation data
@@ -162,8 +183,13 @@ classdef FFNN
                 otherwise
                     error(fprintf('method %s is not supported', obj.train_method))
             end    
+            
+                
+        
+        
             obj.is_train =true;
         end 
+
     end
     
     methods(Access=protected)
@@ -293,6 +319,18 @@ classdef FFNN
                     Bias_Layers_delta{i} = Bias_Layers_delta{i} + B_d{i};
                 end                                                                                                  
             end
+            
+            % add gradient of penalty term
+            if(obj.train_opt_struct.penalty_struct.is_penalty)
+                for i = 1:size(Weight_layers_delta,2)
+                    Weight_layers_delta{i} = Weight_layers_delta{i} + obj.train_opt_struct.penalty_struct.method_obj.backward(obj.net.Weight_layers{i})...
+                                                                     *obj.train_opt_struct.penalty_struct.alpha;
+                end
+                for i = 1:size(Bias_Layers_delta,2)
+                    Bias_Layers_delta{i} = Bias_Layers_delta{i} + obj.train_opt_struct.penalty_struct.method_obj.backward(obj.net.Bias_Layers{i})...
+                                                                     *obj.train_opt_struct.penalty_struct.alpha;
+                end                  
+            end
                 
             % normalize to stardard gradient
             for i = 1:size(Weight_layers_delta,2)
@@ -301,6 +339,7 @@ classdef FFNN
             for i = 1:size(Bias_Layers_delta,2)
                 Bias_Layers_delta{i} = Bias_Layers_delta{i}./sample_num./obj.net.output_dim;
             end     
+            
                                          
             % optimized by adaptive methods
             if (obj.adapt_method_struct.isAdapt)
