@@ -1,5 +1,5 @@
 [x,t] = simplefit_dataset;
-net = FFNN(1,1,[50,50],'activation_fun_str_list',{'tanh','purelin'});
+net = FFNN(1,1,[50 50],'activation_fun_str_list',{'tanh','sigmoid','purelin'});
 % net = net.setTrainOpt(x, t,...
 %                 'EpochNum',1000,...
 %                 'LearningRate',0.1,...
@@ -12,16 +12,16 @@ net = net.setTrainOpt(x, t,...
                 'EpochNum',1000,...
                 'LearningRate',0.1,...
                 'FreezeLayer', [],...
-                'AdaptMethod', 'Adam',...
-                'TrainMethod','BGD');
+                'TrainMethod','BGD',...
+                'PenaltyMethod','l1weight');
 net = net.start_train();
      
-% t_hat = net.predict(x);
-% figure(1)
-% hold on
-% plot(x,t,'-k');
-% plot(x,t_hat,'-b');
-% hold off
+t_hat = net.predict(x);
+figure(1)
+hold on
+plot(x,t,'-k');
+plot(x,t_hat,'-b');
+hold off
 
 
 
