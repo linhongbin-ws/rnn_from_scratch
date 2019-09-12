@@ -87,6 +87,7 @@ classdef FFNN
            
             % default setting
             obj.train_opt_struct.train_ratio = 0.8;
+            obj.train_opt_struct.miniBatch_ratio = 0.1;
             
             assert(size(X_train,1) == obj.net.input_dim, 'dimension of X_train dosent match');
             assert(size(Y_train,1) == obj.net.output_dim, 'dimension of Y_train dosent match');
@@ -129,14 +130,14 @@ classdef FFNN
         function obj = start_train(obj)
             % partition training and validation data
             random_idx = randperm(size(obj.train_opt_struct.input_data,2));
-            X = obj.train_opt_struct.input_data(random_idx);
-            Y = obj.train_opt_struct.output_data(random_idx);
+            X = obj.train_opt_struct.input_data(:,random_idx);
+            Y = obj.train_opt_struct.output_data(:,random_idx);
             
             train_size = fix(size(obj.train_opt_struct.input_data,2)*obj.train_opt_struct.train_ratio);
-            X_train = X(1:train_size);
-            Y_train = Y(1:train_size);
-            X_validate = X(train_size+1:end);
-            Y_validate = Y(train_size+1:end);
+            X_train = X(:,1:train_size);
+            Y_train = Y(:,1:train_size);
+            X_validate = X(:,train_size+1:end);
+            Y_validate = Y(:,train_size+1:end);
             
             
             % normalizing input and output data
@@ -173,7 +174,8 @@ classdef FFNN
                     obj = obj.BGD(obj.normalized_struct.input_mat,...
                                   obj.normalized_struct.output_mat,...
                                   X_validate_norm,...
-                                  Y_validate_norm,0.1);  
+                                  Y_validate_norm,...
+                                  obj.train_opt_struct.miniBatch_ratio);  
                 % gradient descent    
                 case 'GD'
                     obj = obj.GD(obj.normalized_struct.input_mat,...
@@ -195,27 +197,27 @@ classdef FFNN
     methods(Access=protected)
         
         function obj = SGD(obj, X_train, Y_train, X_validate, Y_validate)
-            count =  0;
+            epoch_num =  0;
             random_idx = randperm(size(X_train,2));
-            X_train = X_train(random_idx);
-            Y_train = Y_train(random_idx);
+            X_train = X_train(:,random_idx);
+            Y_train = Y_train(:,random_idx);
             while(1) 
                 for i = 1:size(X_train,2)
                     obj = update_batch(obj, X_train(:,i), Y_train(:,i));
                 end
-                count = count + 1;
-                if count>=obj.train_opt_struct.epoch_num
+                epoch_num = epoch_num + 1;
+                if epoch_num>=obj.train_opt_struct.epoch_num
                     break
                 end
-                obj.evaluate_model(count, X_train, Y_train, X_validate, Y_validate);
+                obj.evaluate_model(epoch_num, X_train, Y_train, X_validate, Y_validate);
             end
         end
   
         function obj = BGD(obj, X_train, Y_train, X_validate, Y_validate, partition_ratio)
             count =  0;
             random_idx = randperm(size(X_train,2));
-            X_train = X_train(random_idx);
-            Y_train = Y_train(random_idx);
+            X_train = X_train(:,random_idx);
+            Y_train = Y_train(:,random_idx);
             
             % find the nearest integer number on the right
             batch_size = fix(size(X_train,2)*partition_ratio)+1;
@@ -231,27 +233,28 @@ classdef FFNN
                 end
             end
             
+            epoch_num = 0;
             while(1) 
                 for i = 1:size(batch_index_list,2)
                     obj = update_batch(obj, X_train(:,batch_index_list{i}), Y_train(:,batch_index_list{i}));
                 end
-                count = count + 1;
-                if count>=obj.train_opt_struct.epoch_num
+                epoch_num = epoch_num + 1;
+                if epoch_num>=obj.train_opt_struct.epoch_num
                     break
                 end
-                obj.evaluate_model(count, X_train, Y_train, X_validate, Y_validate);
+                obj.evaluate_model(epoch_num, X_train, Y_train, X_validate, Y_validate);
             end
         end
 
       function obj = GD(obj, X_train, Y_train, X_validate, Y_validate)
-            count =  0;
+            epoch_num =  0;
             while(1) 
                 obj = update_batch(obj, X_train, Y_train);
-                count = count + 1;
-                if count>=obj.train_opt_struct.epoch_num
+                epoch_num = epoch_num + 1;
+                if epoch_num>=obj.train_opt_struct.epoch_num
                     break
                 end
-                obj.evaluate_model(count, X_train, Y_train, X_validate, Y_validate);
+                obj.evaluate_model(epoch_num, X_train, Y_train, X_validate, Y_validate);
             end
       end
         
