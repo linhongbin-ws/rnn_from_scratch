@@ -7,6 +7,7 @@ classdef FFNN
         is_train = false
         normalized_struct
         train_opt_struct
+        train_result_struct
         adapt_method_struct
         net
     end
@@ -26,21 +27,24 @@ classdef FFNN
             assert(size(x,1) == obj.net.input_dim, 'dimension of x dosent match');
             assert(obj.is_train==true, 'The network need to be trained before prediction');
             
-            y = [];
-            for i =1:size(x,2)
-                input_vec = x(:,i);
-                input_normalized_vec = (input_vec - obj.normalized_struct.input_mean_vec)...
-                                                  ./obj.normalized_struct.input_std_vec;
-                [output_normalized_vec,~,~] = obj.net.forward(input_normalized_vec);
-                output_vec = output_normalized_vec.*obj.normalized_struct.output_std_vec...
-                                                   +obj.normalized_struct.output_mean_vec;
-                y = [y, output_vec];          
+            output_mat_norm = [];
+            
+            input_mat_norm = obj.normalized_struct.method_obj.forward(x,...
+                                                                      obj.normalized_struct.input_mean_vec,...
+                                                                      obj.normalized_struct.input_std_vec);
+            for i =1:size(input_mat_norm,2)
+                [output_normalized_vec,~,~] = obj.net.forward(input_mat_norm(:,i));
+                output_mat_norm = [output_mat_norm, output_normalized_vec];          
             end
+            
+            y = obj.normalized_struct.method_obj.backward(output_mat_norm,...
+                                                          obj.normalized_struct.output_mean_vec,...
+                                                          obj.normalized_struct.output_std_vec);
         end
         
         
         % training function of Neural Network
-        function obj = train(obj, X_train, Y_train, varargin)
+        function obj = setTrainOpt(obj, X_train, Y_train, varargin)
             % X_train: feature matrix of training samples
             % Y_train: label matrix of training samples
             % method: SGD(default) --- stochastic gradient descent
@@ -73,13 +77,14 @@ classdef FFNN
             obj.learning_rate = p.Results.LearningRate;
             obj.update_method = p.Results.UpdateMethod;
             obj.cost_function = get_element_instance(cost_function_str);
-            obj.is_train =true;
             obj.normalized_struct = [];
             obj.normalized_struct.normalized_method = p.Results.NormalizedMethod;
             obj.train_opt_struct.epoch_num = p.Results.EpochNum;
             obj.train_opt_struct.freeze_layer_arr = p.Results.FreezeLayer;
             obj.adapt_method_struct.adapt_method = p.Results.AdaptMethod;
-
+           
+            % default setting
+            obj.train_opt_struct.train_ratio = 0.8;
             
             assert(size(X_train,1) == obj.net.input_dim, 'dimension of X_train dosent match');
             assert(size(Y_train,1) == obj.net.output_dim, 'dimension of Y_train dosent match');
@@ -97,43 +102,73 @@ classdef FFNN
             else
                 obj.adapt_method_struct.isAdapt = false;
             end
+             obj.train_opt_struct.input_data = X_train;
+             obj.train_opt_struct.output_data = Y_train;    
+        end
+        function obj = start_train(obj)
+            % partition training and validation data
+            random_idx = randperm(size(obj.train_opt_struct.input_data,2));
+            X = obj.train_opt_struct.input_data(random_idx);
+            Y = obj.train_opt_struct.output_data(random_idx);
+            
+            train_size = fix(size(obj.train_opt_struct.input_data,2)*obj.train_opt_struct.train_ratio);
+            X_train = X(1:train_size);
+            Y_train = Y(1:train_size);
+            X_validate = X(train_size+1:end);
+            Y_validate = Y(train_size+1:end);
+            
             
             % normalizing input and output data
             switch lower(obj.normalized_struct.normalized_method)
                 case 'zeroscore'
+                    obj.normalized_struct.method_obj = ZScoreNorm();
                     [obj.normalized_struct.input_mat,...
                      obj.normalized_struct.input_mean_vec,...
-                     obj.normalized_struct.input_std_vec] = obj.z_score_normalize(X_train);
-                    X_train = obj.normalized_struct.input_mat;
+                     obj.normalized_struct.input_std_vec] = obj.normalized_struct.method_obj.normalize(X_train);
                     
                     [obj.normalized_struct.output_mat,...
                      obj.normalized_struct.output_mean_vec,...
-                     obj.normalized_struct.output_std_vec] = obj.z_score_normalize(Y_train);
-                    Y_train = obj.normalized_struct.output_mat;
+                     obj.normalized_struct.output_std_vec] = obj.normalized_struct.method_obj.normalize(Y_train);
                     
                 otherwise
-                    error(fprintf('method %s is not supported', obj.normalized_method))
-            end            
+                    error(fprintf('method %s is not supported', obj.normalized_struct.normalized_method))
+            end
+            X_validate_norm = obj.normalized_struct.method_obj.forward(X_validate,...
+                                                                       obj.normalized_struct.input_mean_vec,...
+                                                                       obj.normalized_struct.input_std_vec);
+            Y_validate_norm = obj.normalized_struct.method_obj.forward(Y_validate,...
+                                                                       obj.normalized_struct.output_mean_vec,...
+                                                                       obj.normalized_struct.output_std_vec);
             
             % choose type of training method
             switch upper(obj.train_method)
                 % stochastic gradient descent
                 case 'SGD'
-                    obj = obj.SGD(X_train, Y_train);              
+                    obj = obj.SGD(obj.normalized_struct.input_mat,...
+                                  obj.normalized_struct.output_mat,...
+                                  X_validate_norm,...
+                                  Y_validate_norm);              
                 case 'BGD'
-                    obj = obj.BGD(X_train, Y_train,0.1);  
+                    obj = obj.BGD(obj.normalized_struct.input_mat,...
+                                  obj.normalized_struct.output_mat,...
+                                  X_validate_norm,...
+                                  Y_validate_norm,0.1);  
                 % gradient descent    
                 case 'GD'
-                    obj = obj.GD(X_train, Y_train);
+                    obj = obj.GD(obj.normalized_struct.input_mat,...
+                                  obj.normalized_struct.output_mat,...
+                                  X_validate_norm,...
+                                  Y_validate_norm);
                 otherwise
                     error(fprintf('method %s is not supported', obj.train_method))
-            end                    
+            end    
+            obj.is_train =true;
         end 
     end
     
     methods(Access=protected)
         
-        function obj = SGD(obj, X_train, Y_train)
+        function obj = SGD(obj, X_train, Y_train, X_validate, Y_validate)
             count =  0;
             random_idx = randperm(size(X_train,2));
             X_train = X_train(random_idx);
@@ -146,17 +181,11 @@ classdef FFNN
                 if count>=obj.train_opt_struct.epoch_num
                     break
                 end
-                loss = 0;
-                for i=1:size(X_train,2)
-                    y_hat = obj.net.forward(X_train(:,i));
-                    loss = loss + obj.cost_function.forward(Y_train(:,i), y_hat);
-                end
-                loss = loss/size(X_train,2)/obj.net.output_dim;
-                fprintf('Epoch number %d: log of loss is %.5f\n', count, loss);
+                obj.evaluate_model(count, X_train, Y_train, X_validate, Y_validate);
             end
         end
   
-        function obj = BGD(obj, X_train, Y_train, partition_ratio)
+        function obj = BGD(obj, X_train, Y_train, X_validate, Y_validate, partition_ratio)
             count =  0;
             random_idx = randperm(size(X_train,2));
             X_train = X_train(random_idx);
@@ -184,17 +213,11 @@ classdef FFNN
                 if count>=obj.train_opt_struct.epoch_num
                     break
                 end
-                loss = 0;
-                for i=1:size(X_train,2)
-                    y_hat = obj.net.forward(X_train(:,i));
-                    loss = loss + obj.cost_function.forward(Y_train(:,i), y_hat);
-                end
-                loss = loss/size(X_train,2)/obj.net.output_dim;
-                fprintf('Epoch number %d: log of loss is %.5f\n', count, loss);
+                obj.evaluate_model(count, X_train, Y_train, X_validate, Y_validate);
             end
         end
 
-      function obj = GD(obj, X_train, Y_train)
+      function obj = GD(obj, X_train, Y_train, X_validate, Y_validate)
             count =  0;
             while(1) 
                 obj = update_batch(obj, X_train, Y_train);
@@ -202,15 +225,31 @@ classdef FFNN
                 if count>=obj.train_opt_struct.epoch_num
                     break
                 end
+                obj.evaluate_model(count, X_train, Y_train, X_validate, Y_validate);
+            end
+      end
+        
+      function evaluate_model(obj, epoch_num, X_train, Y_train, X_validate, Y_validate)
+                % calculate train loss
                 loss = 0;
                 for i=1:size(X_train,2)
                     y_hat = obj.net.forward(X_train(:,i));
                     loss = loss + obj.cost_function.forward(Y_train(:,i), y_hat);
                 end
-                loss = loss/size(X_train,2)/obj.net.output_dim;
-                fprintf('Epoch number %d: log of loss is %.5f\n', count, loss);
-            end
-        end
+                obj.train_result_struct.train_loss = loss/size(X_train,2)/obj.net.output_dim;
+                
+                % calculate validation loss
+                loss = 0;
+                for i=1:size(X_validate,2)
+                    y_hat = obj.net.forward(X_validate(:,i));
+                    loss = loss + obj.cost_function.forward(Y_validate(:,i), y_hat);
+                end
+                obj.train_result_struct.validate_loss = loss/size(X_validate,2)/obj.net.output_dim;
+                
+                fprintf('Epoch num is %d: train loss: %.5f, validate loss:%.5f \n', epoch_num,...
+                                                                                   obj.train_result_struct.train_loss,...
+                                                                                   obj.train_result_struct.validate_loss);
+      end
             
         function obj = update_batch(obj, X_train, Y_train)  
             sample_num = size(X_train,2);
@@ -360,15 +399,15 @@ classdef FFNN
 %         end
         
         
-        % Z-score normalization
-        function [x_normalized, mean_vec, std_vec] = z_score_normalize(obj,x)
-            mean_vec = mean(x,2);
-            std_vec = std(x,0,2);
-            x_normalized = [];
-            for i = 1:size(x,2)
-                x_normalized = [x_normalized,(x(:,i) - mean_vec) ./ std_vec];
-            end
-        end
+%         % Z-score normalization
+%         function [x_normalized, mean_vec, std_vec] = z_score_normalize(obj,x)
+%             mean_vec = mean(x,2);
+%             std_vec = std(x,0,2);
+%             x_normalized = [];
+%             for i = 1:size(x,2)
+%                 x_normalized = [x_normalized,(x(:,i) - mean_vec) ./ std_vec];
+%             end
+%         end
         
      
     end
