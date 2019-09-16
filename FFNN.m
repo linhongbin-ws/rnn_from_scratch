@@ -9,6 +9,7 @@ classdef FFNN
         train_opt_struct
         train_result_struct
         adapt_method_struct
+        plot_opt_struct
         net
     end
         
@@ -72,6 +73,7 @@ classdef FFNN
             addParameter(p,'FreezeLayer', default_fz_layer_index_arr, @ismatrix);
             addParameter(p,'AdaptMethod', default_adapt_method, @ischar);
             addParameter(p,'PenaltyMethod', [], @ischar);
+            addParameter(p,'isDrawNet',true,@ischar);
             parse(p, X_train, Y_train, varargin{:});          
             obj.train_method = p.Results.TrainMethod;
             cost_function_str = p.Results.CostFunction;
@@ -84,6 +86,7 @@ classdef FFNN
             obj.train_opt_struct.freeze_layer_arr = p.Results.FreezeLayer;
             obj.adapt_method_struct.adapt_method = p.Results.AdaptMethod;
             obj.train_opt_struct.penalty_struct.penalty_method = p.Results.PenaltyMethod;
+            obj.train_opt_struct.plot_opt_struct.drawNet.isPlot = p.Results.isDrawNet;
            
             % default setting
             obj.train_opt_struct.train_ratio = 0.8;
@@ -92,6 +95,13 @@ classdef FFNN
             assert(size(X_train,1) == obj.net.input_dim, 'dimension of X_train dosent match');
             assert(size(Y_train,1) == obj.net.output_dim, 'dimension of Y_train dosent match');
             assert(size(X_train,2) == size(Y_train,2), 'samples number of X_train and Y_train is not match');
+            
+            % configure plot option
+            if(obj.train_opt_struct.plot_opt_struct.drawNet.isPlot)
+                obj.train_opt_struct.plot_opt_struct.drawNet.updateRate = 5; % update rate:unit Hz
+                obj.train_opt_struct.plot_opt_struct.drawNet.updateCount = 0;
+                obj.train_opt_struct.plot_opt_struct.drawNet.drawCount = 0;
+            end
             
             % configure adaptive method
             if (~isempty(obj.adapt_method_struct.adapt_method))
@@ -107,6 +117,11 @@ classdef FFNN
             end
              obj.train_opt_struct.input_data = X_train;
              obj.train_opt_struct.output_data = Y_train;   
+             
+            % configure plot option
+           if(obj.train_opt_struct.plot_opt_struct.drawNet.isPlot)
+               obj.train_opt_struct.plot_opt_struct.drawNet.figureHandle = figure('Renderer', 'painters', 'Position', [0 0 1920 1080]);
+           end
              
            % choose type of penalty method
            if(isempty(obj.train_opt_struct.penalty_struct.penalty_method))
@@ -125,6 +140,7 @@ classdef FFNN
                end   
                 obj.train_opt_struct.penalty_struct.is_penalty = true;
            end
+           
            
         end
         function obj = start_train(obj)
@@ -161,6 +177,7 @@ classdef FFNN
             Y_validate_norm = obj.normalized_struct.method_obj.forward(Y_validate,...
                                                                        obj.normalized_struct.output_mean_vec,...
                                                                        obj.normalized_struct.output_std_vec);
+
             
             % choose type of training method
             switch upper(obj.train_method)
@@ -209,7 +226,7 @@ classdef FFNN
                 if epoch_num>=obj.train_opt_struct.epoch_num
                     break
                 end
-                obj.evaluate_model(epoch_num, X_train, Y_train, X_validate, Y_validate);
+                obj = obj.evaluate_model(epoch_num, X_train, Y_train, X_validate, Y_validate);
             end
         end
   
@@ -242,7 +259,7 @@ classdef FFNN
                 if epoch_num>=obj.train_opt_struct.epoch_num
                     break
                 end
-                obj.evaluate_model(epoch_num, X_train, Y_train, X_validate, Y_validate);
+                obj = obj.evaluate_model(epoch_num, X_train, Y_train, X_validate, Y_validate);
             end
         end
 
@@ -254,11 +271,11 @@ classdef FFNN
                 if epoch_num>=obj.train_opt_struct.epoch_num
                     break
                 end
-                obj.evaluate_model(epoch_num, X_train, Y_train, X_validate, Y_validate);
+                obj = obj.evaluate_model(epoch_num, X_train, Y_train, X_validate, Y_validate);
             end
       end
         
-      function evaluate_model(obj, epoch_num, X_train, Y_train, X_validate, Y_validate)
+      function obj = evaluate_model(obj, epoch_num, X_train, Y_train, X_validate, Y_validate)
                 % calculate train loss
                 loss = 0;
                 for i=1:size(X_train,2)
@@ -278,6 +295,14 @@ classdef FFNN
                 fprintf('Epoch num is %d: train loss: %.5f, validate loss:%.5f \n', epoch_num,...
                                                                                    obj.train_result_struct.train_loss,...
                                                                                    obj.train_result_struct.validate_loss);
+                                                                               
+                if(obj.train_opt_struct.plot_opt_struct.drawNet.isPlot)  
+                     obj.train_opt_struct.plot_opt_struct.drawNet.updateCount = obj.train_opt_struct.plot_opt_struct.drawNet.updateCount +1;
+                     if(rem(obj.train_opt_struct.plot_opt_struct.drawNet.updateCount, obj.train_opt_struct.plot_opt_struct.drawNet.updateRate) == 0)
+                         obj.train_opt_struct.plot_opt_struct.drawNet.drawCount = obj.train_opt_struct.plot_opt_struct.drawNet.drawCount +1;
+                        obj.train_opt_struct.plot_opt_struct.drawNet.record(obj.train_opt_struct.plot_opt_struct.drawNet.drawCount) = drawNet(obj.train_opt_struct.plot_opt_struct.drawNet.figureHandle, obj.net);
+                     end
+                end
       end
             
         function obj = update_batch(obj, X_train, Y_train)  
@@ -387,6 +412,7 @@ classdef FFNN
                 otherwise
                     error(fprintf('method %s is not supported', obj.train_method))
             end 
+         
         end
         
        function net = gradient_decent(obj,...
@@ -407,6 +433,7 @@ classdef FFNN
                                     - (learning_rate * Bias_Layers_delta{i}).*Bias_Layers_ratio{i};
             end 
        end
+       
         
        % update using Levenberg-Marquardt method
 %         function net = LM(obj,...
