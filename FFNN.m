@@ -73,7 +73,7 @@ classdef FFNN
             addParameter(p,'FreezeLayer', default_fz_layer_index_arr, @ismatrix);
             addParameter(p,'AdaptMethod', default_adapt_method, @ischar);
             addParameter(p,'PenaltyMethod', [], @ischar);
-            addParameter(p,'isDrawNet',true,@ischar);
+            addParameter(p,'isDrawNet',false,@ischar);
             parse(p, X_train, Y_train, varargin{:});          
             obj.train_method = p.Results.TrainMethod;
             cost_function_str = p.Results.CostFunction;
@@ -108,7 +108,9 @@ classdef FFNN
                 obj.adapt_method_struct.isAdapt = true;
                 switch lower(obj.adapt_method_struct.adapt_method)
                     case 'adam'
-                        obj.adapt_method_struct.adapt_obj = Adam();    
+                        obj.adapt_method_struct.adapt_obj = Adam();   
+                    case 'adagrad'
+                        obj.adapt_method_struct.adapt_obj = AdaGrad(); 
                     otherwise
                         error(fprintf('method %s is not supported', obj.adapt_method_struct))
                 end    
@@ -382,7 +384,7 @@ classdef FFNN
 
                 obj.adapt_method_struct.adapt_obj = ...
                     obj.adapt_method_struct.adapt_obj.update_state(gradient_vec);
-                delta_vec = obj.adapt_method_struct.adapt_obj.compute_delta();
+                delta_vec = obj.adapt_method_struct.adapt_obj.compute_gradient(gradient_vec);
 
                 % reverse gradient vector to weight and bias
                 n = 0;

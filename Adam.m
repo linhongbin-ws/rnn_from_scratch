@@ -27,7 +27,7 @@ classdef Adam
         end
         
         % compute the delta w.r.t. parameters which is used for updating network
-        function delta = compute_delta(obj)
+        function delta = compute_gradient(obj, gradient)
             m_t_hat = obj.m_t ./(1-obj.beta_1);
             v_t_hat = obj.v_t ./(1-obj.beta_2);
             delta = m_t_hat ./ (sqrt(v_t_hat) + obj.epsilon);
