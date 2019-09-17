@@ -111,6 +111,8 @@ classdef FFNN
                         obj.adapt_method_struct.adapt_obj = Adam();   
                     case 'adagrad'
                         obj.adapt_method_struct.adapt_obj = AdaGrad(); 
+                    case 'rmsprop'
+                        obj.adapt_method_struct.adapt_obj = RMSprop(); 
                     otherwise
                         error(fprintf('method %s is not supported', obj.adapt_method_struct))
                 end    
