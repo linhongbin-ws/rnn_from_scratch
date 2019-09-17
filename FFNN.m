@@ -352,16 +352,12 @@ classdef FFNN
                 end                                                                                                  
             end
             
-            % add gradient of penalty term
+            % add gradient of penalty term on Weight Layer
             if(obj.train_opt_struct.penalty_struct.is_penalty)
                 for i = 1:size(Weight_layers_delta,2)
                     Weight_layers_delta{i} = Weight_layers_delta{i} + obj.train_opt_struct.penalty_struct.method_obj.backward(obj.net.Weight_layers{i})...
                                                                      *obj.train_opt_struct.penalty_struct.alpha;
-                end
-                for i = 1:size(Bias_Layers_delta,2)
-                    Bias_Layers_delta{i} = Bias_Layers_delta{i} + obj.train_opt_struct.penalty_struct.method_obj.backward(obj.net.Bias_Layers{i})...
-                                                                     *obj.train_opt_struct.penalty_struct.alpha;
-                end                  
+                end                
             end
                 
             % normalize to stardard gradient
