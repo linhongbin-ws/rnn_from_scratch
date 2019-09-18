@@ -74,6 +74,7 @@ classdef FFNN
             addParameter(p,'AdaptMethod', default_adapt_method, @ischar);
             addParameter(p,'PenaltyMethod', [], @ischar);
             addParameter(p,'isDrawNet',false,@ischar);
+            addParameter(p,'EarlyStopEpochNum', 8, @isnumeric);
             parse(p, X_train, Y_train, varargin{:});          
             obj.train_method = p.Results.TrainMethod;
             cost_function_str = p.Results.CostFunction;
@@ -87,10 +88,14 @@ classdef FFNN
             obj.adapt_method_struct.adapt_method = p.Results.AdaptMethod;
             obj.train_opt_struct.penalty_struct.penalty_method = p.Results.PenaltyMethod;
             obj.train_opt_struct.plot_opt_struct.drawNet.isPlot = p.Results.isDrawNet;
+            obj.train_opt_struct.earlyStop.LookAHead_epochNum = p.Results.EarlyStopEpochNum;
+            obj.train_opt_struct.earlyStop.LookAHead_Count = 0;
            
             % default setting
             obj.train_opt_struct.train_ratio = 0.8;
             obj.train_opt_struct.miniBatch_ratio = 0.1;
+            obj.train_result_struct.train_loss_arr = [];
+            obj.train_result_struct.validate_loss_arr = [];
             
             assert(size(X_train,1) == obj.net.input_dim, 'dimension of X_train dosent match');
             assert(size(Y_train,1) == obj.net.output_dim, 'dimension of Y_train dosent match');
@@ -231,6 +236,13 @@ classdef FFNN
                     break
                 end
                 obj = obj.evaluate_model(epoch_num, X_train, Y_train, X_validate, Y_validate);
+                % early stop
+                if(epoch_num ~= 1)
+                    obj = obj.update_early_stop();
+                    if(obj.train_result_struct.is_earlyStop)
+                        break;
+                    end
+                end
             end
         end
   
@@ -264,6 +276,13 @@ classdef FFNN
                     break
                 end
                 obj = obj.evaluate_model(epoch_num, X_train, Y_train, X_validate, Y_validate);
+                % early stop
+                if(epoch_num ~= 1)
+                    obj = obj.update_early_stop();
+                    if(obj.train_result_struct.is_earlyStop)
+                        break;
+                    end
+                end
             end
         end
 
@@ -276,7 +295,31 @@ classdef FFNN
                     break
                 end
                 obj = obj.evaluate_model(epoch_num, X_train, Y_train, X_validate, Y_validate);
+                
+                % early stop
+                if(epoch_num ~= 1)
+                    obj = obj.update_early_stop();
+                    if(obj.train_result_struct.is_earlyStop)
+                        break;
+                    end
+                end
             end
+      end
+      
+      function obj = update_early_stop(obj)
+          obj.train_result_struct.is_earlyStop = false;
+          if(obj.train_result_struct.validate_loss_arr(end)>=obj.train_result_struct.validate_loss_arr(end-1))
+                 obj.train_opt_struct.earlyStop.LookAHead_Count =  obj.train_opt_struct.earlyStop.LookAHead_Count + 1;
+            else
+                obj.train_opt_struct.earlyStop.LookAHead_Count = 0; 
+                obj.train_result_struct.best_net = obj.net;
+          end
+          
+          if(obj.train_opt_struct.earlyStop.LookAHead_Count == obj.train_opt_struct.earlyStop.LookAHead_epochNum)
+                obj.train_result_struct.stop_reason = 'early stop: number of increasing validation error exceed permitting look head epoches';
+                obj.net = obj.train_result_struct.best_net;
+                obj.train_result_struct.is_earlyStop = true;
+          end
       end
         
       function obj = evaluate_model(obj, epoch_num, X_train, Y_train, X_validate, Y_validate)
@@ -286,7 +329,9 @@ classdef FFNN
                     y_hat = obj.net.forward(X_train(:,i));
                     loss = loss + obj.cost_function.forward(Y_train(:,i), y_hat);
                 end
-                obj.train_result_struct.train_loss = loss/size(X_train,2)/obj.net.output_dim;
+                train_loss = loss/size(X_train,2)/obj.net.output_dim;
+                obj.train_result_struct.train_loss_arr = [obj.train_result_struct.train_loss_arr, train_loss];
+
                 
                 % calculate validation loss
                 loss = 0;
@@ -294,11 +339,12 @@ classdef FFNN
                     y_hat = obj.net.forward(X_validate(:,i));
                     loss = loss + obj.cost_function.forward(Y_validate(:,i), y_hat);
                 end
-                obj.train_result_struct.validate_loss = loss/size(X_validate,2)/obj.net.output_dim;
+                validate_loss = loss/size(X_validate,2)/obj.net.output_dim;
+                obj.train_result_struct.validate_loss_arr = [obj.train_result_struct.validate_loss_arr, validate_loss];    
                 
                 fprintf('Epoch num is %d: train loss: %.5f, validate loss:%.5f \n', epoch_num,...
-                                                                                   obj.train_result_struct.train_loss,...
-                                                                                   obj.train_result_struct.validate_loss);
+                                                                                   train_loss,...
+                                                                                   validate_loss);
                                                                                
                 if(obj.train_opt_struct.plot_opt_struct.drawNet.isPlot)  
                      obj.train_opt_struct.plot_opt_struct.drawNet.updateCount = obj.train_opt_struct.plot_opt_struct.drawNet.updateCount +1;
